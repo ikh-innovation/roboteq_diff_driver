@@ -1,0 +1,32 @@
+# enable broadcast of odom tf
+pub_odom_tf: true
+# specify odom frame
+odom_frame: odom #$(arg prefix)odom
+# specify base frame
+base_frame: base_footprint #$(arg prefix)base_footprint
+# specify cmd_vel topic
+cmdvel_topic: cmd_vel
+# specify port for roboteq controller
+port: /dev/ttyACM0
+# specify baud for roboteq controller
+baud: 115200
+# specify whether to use open-loop motor speed control (as opposed to closed-loop)
+open_loop: false
+# specify robot wheel circumference (perimeter) in meters  (for r=0.151 meters)
+wheel_circumference: 0.973894
+# specify robot track width in meters
+track_width: 0.91
+# specify pulse-per-revolution for motor encoders for wheel rotation
+encoder_ppr: 500
+# specify counts-per-revolution for motor encoders for wheel rotation (ppr*4 for quadrature encoders)
+encoder_cpr: 383067
+# specify maximum motor current (amps)
+max_amps: 30.0
+# specify maximum motor speed (rpm)
+max_rpm: 5000
+# specify reduction ratio, if there is no put 1
+reduction_ratio: 191.533
+# specify reduction maximum linear velocity (m/s)
+max_vel: 0.35
+# specify maximum acceleration (rpm/s)
+max_accel: 500
