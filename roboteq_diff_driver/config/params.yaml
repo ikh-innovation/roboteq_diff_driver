@@ -7,7 +7,7 @@ base_frame: base_footprint #$(arg prefix)base_footprint
 # specify cmd_vel topic
 cmdvel_topic: cmd_vel
 # specify port for roboteq controller
-port: /dev/ttyACM0
+port: /dev/ttyS2
 # specify baud for roboteq controller
 baud: 115200
 # specify whether to use open-loop motor speed control (as opposed to closed-loop)
@@ -21,12 +21,14 @@ encoder_ppr: 500
 # specify counts-per-revolution for motor encoders for wheel rotation (ppr*4 for quadrature encoders)
 encoder_cpr: 383067
 # specify maximum motor current (amps)
-max_amps: 30.0
+max_amps: 10.0
 # specify maximum motor speed (rpm)
-max_rpm: 5000
+max_rpm: 3500
 # specify reduction ratio, if there is no put 1
 reduction_ratio: 191.533
 # specify reduction maximum linear velocity (m/s)
 max_vel: 0.35
 # specify maximum acceleration (rpm/s)
-max_accel: 500
+max_accel: 8000
+# specify maximum deceleration (rpm/s)
+max_decel: 8000

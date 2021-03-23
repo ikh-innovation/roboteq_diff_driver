@@ -183,6 +183,7 @@ protected:
   double reduction_ratio;
   double max_vel;
   int max_accel;
+  int max_decel;
 };
 
 MainNode::MainNode() : starttime(0),
@@ -218,7 +219,8 @@ MainNode::MainNode() : starttime(0),
                        max_rpm(0),
                        reduction_ratio(1),
                        max_vel(0),
-                       max_accel(500)
+                       max_accel(2000),
+                       max_decel(2000)
 {
 
   // CBA Read local params (from launch file)
@@ -257,6 +259,8 @@ MainNode::MainNode() : starttime(0),
   ROS_INFO_STREAM("max_vel: " << max_vel);
   nhLocal.param("max_accel", max_accel, 500);
   ROS_INFO_STREAM("max_accel: " << max_accel);
+  nhLocal.param("max_decel", max_decel, 500);
+  ROS_INFO_STREAM("max_decel: " << max_decel);
 }
 
 //
@@ -384,20 +388,30 @@ void MainNode::cmdvel_setup()
   controller.write(left_max_accel.str());
 
   // set max deceleration rate (2000 rpm/s * 10)
-  controller.write("^MDEC 1 30000\r");
-  controller.write("^MDEC 2 30000\r");
+  std::stringstream right_max_decel;
+  std::stringstream left_max_decel;
+  right_max_decel << "^MDEC 1 " << max_decel * 10 << "\r";
+  left_max_decel << "^MDEC 2 " << max_decel * 10 << "\r";
+  controller.write(right_max_decel.str());
+  controller.write(left_max_decel.str());
+  // controller.write("^MDEC 1 80000\r");
+  // controller.write("^MDEC 2 80000\r");
 
   // set PID parameters (gain * 10)
   controller.write("^KP 1 00\r");
   controller.write("^KP 2 00\r");
-  controller.write("^KI 1 20\r");
-  controller.write("^KI 2 20\r");
-  controller.write("^KD 1 0\r");
-  controller.write("^KD 2 0\r");
+  controller.write("^KI 1 50\r");
+  controller.write("^KI 2 50\r");
+  controller.write("^KD 1 00\r");
+  controller.write("^KD 2 00\r");
 
   // set encoder mode (18 for feedback on motor1, 34 for feedback on motor2)
   controller.write("^EMOD 1 18\r");
   controller.write("^EMOD 2 34\r");
+
+  // set Close Loop Error Detection (3: 1000ms at Error > 500)
+  controller.write("^CLERD 1 3\r");
+  controller.write("^CLERD 2 3\r");
 
   // set encoder counts (ppr)
   std::stringstream right_enccmd;
