@@ -5,6 +5,7 @@
 #include <string>
 #include <sstream>
 
+
 #define DELTAT(_nowtime, _thentime) ((_thentime > _nowtime) ? ((0xffffffff - _thentime) + _nowtime) : (_nowtime - _thentime))
 
 //
@@ -20,8 +21,11 @@
 // #define _CMDVEL_FORCE_RUN
 
 #include <geometry_msgs/Twist.h>
+#include <geometry_msgs/QuaternionStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <tf/transform_broadcaster.h>
+#include <sensor_msgs/Imu.h>
+// #include <tf.h>
 
 //
 // odom publisher
@@ -87,6 +91,12 @@ public:
   void cmdvel_loop();
   void cmdvel_run();
 
+  // IMU Callback
+  void imu_callback(const sensor_msgs::Imu &imu);
+
+  // imu setup
+  void imu_setup();
+
   //
   // odom publisher
   //
@@ -117,6 +127,9 @@ protected:
   // cmd_vel subscriber
   //
   ros::Subscriber cmdvel_sub;
+
+  // Imu Subscriber
+  ros::Subscriber imu_sub;
 
   //
   // odom publisher
@@ -184,6 +197,12 @@ protected:
   double max_vel;
   int max_accel;
   int max_decel;
+  bool use_imu_yaw;
+  double imu_yaw, imu_yaw_init;
+  int imu_cnt;
+  bool imu_initialized;
+  bool local_feedback_vel;
+  std::string imu_topic;
 };
 
 MainNode::MainNode() : starttime(0),
@@ -220,7 +239,11 @@ MainNode::MainNode() : starttime(0),
                        reduction_ratio(1),
                        max_vel(0),
                        max_accel(2000),
-                       max_decel(2000)
+                       max_decel(2000),
+                       use_imu_yaw(false),
+                       imu_yaw(0.0),
+                       imu_yaw_init(0.0),
+                       imu_initialized(false)
 {
 
   // CBA Read local params (from launch file)
@@ -261,6 +284,14 @@ MainNode::MainNode() : starttime(0),
   ROS_INFO_STREAM("max_accel: " << max_accel);
   nhLocal.param("max_decel", max_decel, 500);
   ROS_INFO_STREAM("max_decel: " << max_decel);
+
+  nhLocal.param("use_imu_yaw", use_imu_yaw, false);
+  ROS_INFO_STREAM("use_imu_yaw: " << use_imu_yaw);
+
+  nhLocal.param<std::string>("imu_topic", imu_topic, "imu/data");
+  ROS_INFO_STREAM("imu_topic: " << imu_topic);
+  nhLocal.param("local_feedback_vel", local_feedback_vel, false);
+  ROS_INFO_STREAM("local_feedback_vel: " << local_feedback_vel);
 }
 
 //
@@ -276,7 +307,9 @@ void MainNode::cmdvel_callback(const geometry_msgs::Twist &twist_msg)
   // float right_speed = twist_msg.linear.x;
   // float left_speed = twist_msg.linear.x;
 
+  ROS_INFO_STREAM("================================");
   ROS_INFO_STREAM("right linear vel:" << right_speed);
+  ROS_INFO_STREAM("right linear vel:" << left_speed);
 
   // set maximum linear speed at 0.35 m/s (4500rpm in motor)
   if (fabs(right_speed) > max_vel)
@@ -314,7 +347,9 @@ void MainNode::cmdvel_callback(const geometry_msgs::Twist &twist_msg)
     int32_t left_rpm = ((left_speed / wheel_circumference) * 60.0) * reduction_ratio;
     // int32_t right_rpm = right_speed;
     // int32_t left_rpm = left_speed;
+    ROS_INFO_STREAM("----------------------------");
     ROS_INFO_STREAM("right motor rpm:" << right_rpm);
+    ROS_INFO_STREAM("left motor rpm:" << left_rpm);
 #ifdef _CMDVEL_DEBUG
     ROS_DEBUG_STREAM("cmdvel rpm right: " << right_rpm << " left: " << left_rpm);
 #endif
@@ -325,6 +360,7 @@ void MainNode::cmdvel_callback(const geometry_msgs::Twist &twist_msg)
 #ifndef _CMDVEL_FORCE_RUN
   controller.write(right_cmd.str());
   controller.write(left_cmd.str());
+  ROS_INFO_STREAM("FLUSH");
   controller.flush();
 #endif
 }
@@ -400,8 +436,8 @@ void MainNode::cmdvel_setup()
   // set PID parameters (gain * 10)
   controller.write("^KP 1 00\r");
   controller.write("^KP 2 00\r");
-  controller.write("^KI 1 50\r");
-  controller.write("^KI 2 50\r");
+  controller.write("^KI 1 70\r");
+  controller.write("^KI 2 70\r");
   controller.write("^KD 1 00\r");
   controller.write("^KD 2 00\r");
 
@@ -450,6 +486,51 @@ void MainNode::cmdvel_run()
   }
   controller.flush();
 #endif
+}
+
+/*
+IMU SETUP 
+*/
+
+void MainNode::imu_setup()
+{
+  if (use_imu_yaw)
+  {
+    imu_sub = nh.subscribe(imu_topic, 1000, &MainNode::imu_callback, this);
+  };
+}
+
+void MainNode::imu_callback(const sensor_msgs::Imu &imu)
+{
+
+  //TF quaternion
+  tf::Quaternion q(
+      imu.orientation.x,
+      imu.orientation.y,
+      imu.orientation.z,
+      imu.orientation.w);
+
+  // TF matrix
+  tf::Matrix3x3 m(q);
+  // Roll Pitch Yaw
+  double roll, pitch, yaw;
+  m.getRPY(roll, pitch, yaw);
+  //ROS_INFO("IMU SUBSCRIBER");
+  if (!imu_initialized)
+  {
+    if (imu_cnt >= 20)
+    {
+      imu_initialized = true;
+    }
+    imu_yaw_init = yaw;
+    imu_cnt++;
+  }
+  else
+  {
+    imu_yaw = yaw - imu_yaw_init;
+    //std::cout << "- IMU YAW: " << imu_yaw << std::endl;
+    //std::cout << "- IMU INIT: " << imu_yaw_init << std::endl;
+  }
 }
 
 //
@@ -549,8 +630,13 @@ void MainNode::odom_setup()
   odom_msg.pose.covariance[35] = 1000;
 
   odom_msg.twist.covariance.assign(0);
+  
   odom_msg.twist.covariance[0] = 0.001;
   odom_msg.twist.covariance[7] = 0.001;
+  if (local_feedback_vel) {
+    odom_msg.twist.covariance[7] = 1000000;
+  }
+  
   odom_msg.twist.covariance[14] = 1000000;
   odom_msg.twist.covariance[21] = 1000000;
   odom_msg.twist.covariance[28] = 1000000;
@@ -761,20 +847,28 @@ void MainNode::odom_publish()
 
 #ifdef _ODOM_DEBUG
 
-// ROS_DEBUG("right: ");
-// ROS_DEBUG(odom_encoder_right);
-// ROS_DEBUG(" left: ");
-// ROS_DEBUG(odom_encoder_left);
-// ROS_DEBUG(" dt: ");
-// ROS_DEBUG(dt);
-// ROS_DEBUG("");
+  // ROS_DEBUG("right: ");
+  // ROS_DEBUG(odom_encoder_right);
+  // ROS_DEBUG(" left: ");
+  // ROS_DEBUG(odom_encoder_left);
+  // ROS_DEBUG(" dt: ");
+  // ROS_DEBUG(dt);
+  // ROS_DEBUG("");
 
 #endif
 
   // determine deltas of distance and angle, odom_encoder_right is the relative count of encoder from serial
   float linear = (((float)odom_encoder_right / (float)encoder_cpr) * wheel_circumference + ((float)odom_encoder_left / (float)encoder_cpr) * wheel_circumference) / 2.0;
   //  float angular = ((float)odom_encoder_right / (float)encoder_cpr * wheel_circumference - (float)odom_encoder_left / (float)encoder_cpr * wheel_circumference) / track_width * -1.0;
+
   float angular = ((float)odom_encoder_right / (float)encoder_cpr * wheel_circumference - (float)odom_encoder_left / (float)encoder_cpr * wheel_circumference) / track_width;
+
+  if (use_imu_yaw && imu_initialized)
+  {
+
+    angular = imu_yaw;
+  }
+
 #ifdef _ODOM_DEBUG
 /*
 ROS_DEBUG("linear: ");
@@ -786,23 +880,44 @@ ROS_DEBUG("");
 #endif
 
   // Update odometry
-  odom_x += linear * cos(odom_yaw);         // m
-  odom_y += linear * sin(odom_yaw);         // m
-  odom_yaw = NORMALIZE(odom_yaw + angular); // rad
-
+  odom_x += linear * cos(odom_yaw); // m
+  odom_y += linear * sin(odom_yaw); // m
+  if (!use_imu_yaw)
+  {
+    odom_yaw = NORMALIZE(odom_yaw + angular); // rad
+  }
+  else if (use_imu_yaw && imu_initialized)
+  {
+    odom_yaw = angular;
+  }
+  
 #ifdef _ODOM_DEBUG
 //ROS_DEBUG_STREAM( "odom x: " << odom_x << " y: " << odom_y << " yaw: " << odom_yaw );
 #endif
 
   // Calculate velocities
-  float vx = (odom_x - odom_last_x) / dt;
-  float vy = (odom_y - odom_last_y) / dt;
+  float vx,vy;
+  if (!local_feedback_vel){
+    vx = (odom_x - odom_last_x) / dt;
+    vy = (odom_y - odom_last_y) / dt;
+  }
+  else{
+    vx = (linear-odom_last_x)/dt;
+    vy = 0.0;
+  }
+  
   float vyaw = (odom_yaw - odom_last_yaw) / dt;
 #ifdef _ODOM_DEBUG
 //ROS_DEBUG_STREAM( "velocity vx: " << odom_x << " vy: " << odom_y << " vyaw: " << odom_yaw );
 #endif
+  if (!local_feedback_vel){
   odom_last_x = odom_x;
   odom_last_y = odom_y;
+  }
+  else{
+    odom_last_x = linear;
+    odom_last_y = 0.0;
+  }
   odom_last_yaw = odom_yaw;
 #ifdef _ODOM_DEBUG
 /*
@@ -875,6 +990,7 @@ int MainNode::run()
     sleep(5);
   }
 
+  imu_setup();
   cmdvel_setup();
   odom_setup();
 
@@ -901,7 +1017,7 @@ int MainNode::run()
     //    // Handle 50 Hz publishing
     //    if (DELTAT(nowtime,hstimer) >= 20)
     // Handle 30 Hz publishing
-    if (DELTAT(nowtime, hstimer) >= 33)
+    if (DELTAT(nowtime, hstimer) >= 20)
     {
       hstimer = nowtime;
       //      odom_hs_run();
