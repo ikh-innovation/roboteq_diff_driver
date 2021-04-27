@@ -11,6 +11,7 @@ add_message_files(FILES
                   Quaternion.msg
                   Pose.msg
                   Twist.msg
+                  Float64Stamped.msg
                  )
 
 add_service_files(FILES

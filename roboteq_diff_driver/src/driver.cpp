@@ -5,7 +5,6 @@
 #include <string>
 #include <sstream>
 
-
 #define DELTAT(_nowtime, _thentime) ((_thentime > _nowtime) ? ((0xffffffff - _thentime) + _nowtime) : (_nowtime - _thentime))
 
 //
@@ -49,6 +48,7 @@
 #include <nav_msgs/Odometry.h>
 #ifdef _ODOM_SENSORS
 #include <std_msgs/Float32.h>
+#include <roboteq_diff_msgs/Float64Stamped.h>
 #include <roboteq_diff_msgs/Duplex.h>
 #endif
 #ifdef _ODOM_COVAR_SERVER
@@ -140,13 +140,13 @@ protected:
   ros::Publisher odom_pub;
 
 #ifdef _ODOM_SENSORS
-  std_msgs::Float32 voltage_msg;
-  ros::Publisher voltage_pub;
+  roboteq_diff_msgs::Float64Stamped voltage_msg, internal_voltage_msg, aux_voltage_msg;
+  ros::Publisher internal_voltage_pub, aux_voltage_pub, voltage_pub;
   roboteq_diff_msgs::Duplex current_msg;
   ros::Publisher current_pub;
-  std_msgs::Float32 energy_msg;
+  roboteq_diff_msgs::Float64Stamped energy_msg;
   ros::Publisher energy_pub;
-  std_msgs::Float32 temperature_msg;
+  roboteq_diff_msgs::Float64Stamped temperature_msg;
   ros::Publisher temperature_pub;
 #endif
 
@@ -171,6 +171,8 @@ protected:
 
 #ifdef _ODOM_SENSORS
   float voltage;
+  float internal_voltage;
+  float aux_voltage;
   float current_right;
   float current_left;
   float energy;
@@ -221,6 +223,8 @@ MainNode::MainNode() : starttime(0),
                        odom_last_time(0),
 #ifdef _ODOM_SENSORS
                        voltage(0.0),
+                       internal_voltage(0.0),
+                       aux_voltage(0.0),
                        current_right(0.0),
                        current_left(0.0),
                        energy(0.0),
@@ -604,13 +608,17 @@ void MainNode::odom_setup()
 
 #ifdef _ODOM_SENSORS
   ROS_INFO("Publishing to topic roboteq/voltage");
-  voltage_pub = nh.advertise<std_msgs::Float32>("roboteq/voltage", 1000);
+  voltage_pub = nh.advertise<roboteq_diff_msgs::Float64Stamped>("roboteq/voltage", 1000);
+  ROS_INFO("Publishing to topic roboteq/internal_voltage");
+  internal_voltage_pub = nh.advertise<roboteq_diff_msgs::Float64Stamped>("roboteq/internal_voltage", 1000);
+  ROS_INFO("Publishing to topic roboteq/aux_voltage");
+  aux_voltage_pub = nh.advertise<roboteq_diff_msgs::Float64Stamped>("roboteq/aux_voltage", 1000);
   ROS_INFO("Publishing to topic roboteq/current");
   current_pub = nh.advertise<roboteq_diff_msgs::Duplex>("roboteq/current", 1000);
   ROS_INFO("Publishing to topic roboteq/energy");
-  energy_pub = nh.advertise<std_msgs::Float32>("roboteq/energy", 1000);
+  energy_pub = nh.advertise<roboteq_diff_msgs::Float64Stamped>("roboteq/energy", 1000);
   ROS_INFO("Publishing to topic roboteq/temperature");
-  temperature_pub = nh.advertise<std_msgs::Float32>("roboteq/temperature", 1000);
+  temperature_pub = nh.advertise<roboteq_diff_msgs::Float64Stamped>("roboteq/temperature", 1000);
 #endif
 
   tf_msg.header.seq = 0;
@@ -630,13 +638,14 @@ void MainNode::odom_setup()
   odom_msg.pose.covariance[35] = 1000;
 
   odom_msg.twist.covariance.assign(0);
-  
+
   odom_msg.twist.covariance[0] = 0.001;
   odom_msg.twist.covariance[7] = 0.001;
-  if (local_feedback_vel) {
+  if (local_feedback_vel)
+  {
     odom_msg.twist.covariance[7] = 1000000;
   }
-  
+
   odom_msg.twist.covariance[14] = 1000000;
   odom_msg.twist.covariance[21] = 1000000;
   odom_msg.twist.covariance[28] = 1000000;
@@ -703,6 +712,7 @@ void MainNode::odom_loop()
       return;
     if (ch == '\r')
     {
+      // ROS_INFO_STREAM("line: " << odom_buf);
       odom_buf[odom_idx] = 0;
 #ifdef _ODOM_DEBUG
 //ROS_DEBUG_STREAM( "line: " << odom_buf );
@@ -735,39 +745,71 @@ void MainNode::odom_loop()
       // V= is voltages
       else if (odom_buf[0] == 'V' && odom_buf[1] == '=')
       {
+        // ROS_INFO_STREAM("BUF VOLTAGE: "<<odom_buf);
         int count = 0;
         int start = 2;
-        for (int delim = 2; delim <= odom_idx; delim++)
+
+        std::string odom_buf_string(odom_buf);
+        std::size_t found = odom_buf_string.find(":");
+        std::string data = odom_buf_string.substr(start, 3);
+        while (count < 3)
         {
-          if (odom_buf[delim] == ':' || odom_buf[delim] == 0)
+          if (count == 0)
           {
-            odom_buf[delim] = 0;
-            /*
-            switch (count)
-            {
-            case 0:
-//              odom_internal_voltage = (float)strtol(odom_buf+start, NULL, 10) / 10.0;
-              break;
-            case 1:
-              voltage = (float)strtol(odom_buf+start, NULL, 10) / 10.0;
-              break;
-            case 2:
-//              odom_aux_voltage = (float)strtol(odom_buf+start, NULL, 1000.0);
-              break;
-            }
-*/
-            if (count == 1)
-            {
-              voltage = (float)strtol(odom_buf + start, NULL, 10) / 10.0;
-#ifdef _ODOM_DEBUG
-//ROS_DEBUG_STREAM("voltage: " << voltage);
-#endif
-              break;
-            }
-            start = delim + 1;
-            count++;
+
+            internal_voltage = (float) std::stoi(data,nullptr,10)/10.0;
           }
+          else if (count == 1)
+          {
+            voltage = (float) std::stoi(data,nullptr,10)/10.0;
+
+          }
+          else if (count == 2)
+          {
+            aux_voltage = (float) std::stoi(data,nullptr,10)/1000.0;
+          }
+          start = (int)found + 1;
+          found = odom_buf_string.find(":", found + 1);
+          int length = 3;
+          if (count == 1)
+          {
+            length = 4;
+          }
+          data = odom_buf_string.substr(start, length);
+          count++;
         }
+
+        // for (int delim = 2; delim <= odom_idx; delim++)
+        // {
+        //   if (odom_buf[delim] == ':' || odom_buf[delim] == 0)
+        //   {
+        //     odom_buf[delim] = 0;
+
+        //     switch (count)
+        //     {
+        //     case 0:
+        //       internal_voltage = (float)strtol(odom_buf + start, NULL, 10) / 10.0;
+        //       break;
+        //     case 1:
+        //       voltage = (float)strtol(odom_buf + start, NULL, 10) / 10.0;
+        //       break;
+        //     case 2:
+        //       aux_voltage = (float)strtol(odom_buf + start, NULL, 1000.0);
+        //       break;
+        //     }
+
+        //     //             if (count == 1)
+        //     //             {
+        //     //               voltage = (float)strtol(odom_buf + start, NULL, 10) / 10.0;
+        //     // #ifdef _ODOM_DEBUG
+        //     // //ROS_DEBUG_STREAM("voltage: " << voltage);
+        //     // #endif
+        //     //               break;
+        //     //             }
+        //     start = delim + 1;
+        //     count++;
+        //   }
+        // }
       }
       // BA= is motor currents
       else if (odom_buf[0] == 'B' && odom_buf[1] == 'A' && odom_buf[2] == '=')
@@ -822,16 +864,29 @@ void MainNode::odom_ls_run()
 {
 
 #ifdef _ODOM_SENSORS
-  //  voltage_msg.header.seq++;
-  //  voltage_msg.header.stamp = ros::Time::now();
+
+  voltage_msg.header.seq++;
+  voltage_msg.header.stamp = ros::Time::now();
   voltage_msg.data = voltage;
   voltage_pub.publish(voltage_msg);
-  //  energy_msg.header.seq++;
-  //  energy_msg.header.stamp = ros::Time::now();
+
+  internal_voltage_msg.header.seq++;
+  internal_voltage_msg.header.stamp = ros::Time::now();
+  internal_voltage_msg.data = internal_voltage;
+  internal_voltage_pub.publish(internal_voltage_msg);
+
+  aux_voltage_msg.header.seq++;
+  aux_voltage_msg.header.stamp = ros::Time::now();
+  aux_voltage_msg.data = aux_voltage;
+  aux_voltage_pub.publish(aux_voltage_msg);
+
+  energy_msg.header.seq++;
+  energy_msg.header.stamp = ros::Time::now();
   energy_msg.data = energy;
   energy_pub.publish(energy_msg);
-  //  temperature_msg.header.seq++;
-  //  temperature_msg.header.stamp = ros::Time::now();
+
+  temperature_msg.header.seq++;
+  temperature_msg.header.stamp = ros::Time::now();
   temperature_msg.data = temperature;
   temperature_pub.publish(temperature_msg);
 #endif
@@ -890,31 +945,35 @@ ROS_DEBUG("");
   {
     odom_yaw = angular;
   }
-  
+
 #ifdef _ODOM_DEBUG
 //ROS_DEBUG_STREAM( "odom x: " << odom_x << " y: " << odom_y << " yaw: " << odom_yaw );
 #endif
 
   // Calculate velocities
-  float vx,vy;
-  if (!local_feedback_vel){
+  float vx, vy;
+  if (!local_feedback_vel)
+  {
     vx = (odom_x - odom_last_x) / dt;
     vy = (odom_y - odom_last_y) / dt;
   }
-  else{
-    vx = (linear-odom_last_x)/dt;
+  else
+  {
+    vx = (linear - odom_last_x) / dt;
     vy = 0.0;
   }
-  
+
   float vyaw = (odom_yaw - odom_last_yaw) / dt;
 #ifdef _ODOM_DEBUG
 //ROS_DEBUG_STREAM( "velocity vx: " << odom_x << " vy: " << odom_y << " vyaw: " << odom_yaw );
 #endif
-  if (!local_feedback_vel){
-  odom_last_x = odom_x;
-  odom_last_y = odom_y;
+  if (!local_feedback_vel)
+  {
+    odom_last_x = odom_x;
+    odom_last_y = odom_y;
   }
-  else{
+  else
+  {
     odom_last_x = linear;
     odom_last_y = 0.0;
   }
