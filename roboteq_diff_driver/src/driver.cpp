@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <string>
 #include <sstream>
+#include <math.h>
 
 #define DELTAT(_nowtime, _thentime) ((_thentime > _nowtime) ? ((0xffffffff - _thentime) + _nowtime) : (_nowtime - _thentime))
 
@@ -247,7 +248,8 @@ MainNode::MainNode() : starttime(0),
                        use_imu_yaw(false),
                        imu_yaw(0.0),
                        imu_yaw_init(0.0),
-                       imu_initialized(false)
+                       imu_initialized(false),
+                       imu_cnt(0)
 {
 
   // CBA Read local params (from launch file)
@@ -500,7 +502,7 @@ void MainNode::imu_setup()
 {
   if (use_imu_yaw)
   {
-    imu_sub = nh.subscribe(imu_topic, 1000, &MainNode::imu_callback, this);
+    imu_sub = nh.subscribe(imu_topic, 100, &MainNode::imu_callback, this);
   };
 }
 
@@ -516,24 +518,27 @@ void MainNode::imu_callback(const sensor_msgs::Imu &imu)
 
   // TF matrix
   tf::Matrix3x3 m(q);
-  // Roll Pitch Yaw
+  // Calculate ROLL PITCH YAW from quaternion
   double roll, pitch, yaw;
   m.getRPY(roll, pitch, yaw);
-  //ROS_INFO("IMU SUBSCRIBER");
-  if (!imu_initialized)
+  // Check if yaw is NaN: When yaw= NaN, then the statement yaw!=yaw is always True
+  if (yaw == yaw)
   {
-    if (imu_cnt >= 20)
+    if (!imu_initialized)
     {
-      imu_initialized = true;
+      imu_yaw_init = imu_yaw_init + yaw;
+      imu_cnt++;
+      if (imu_cnt >= 100)
+      {
+        imu_initialized = true;
+        imu_yaw_init /= (double)(imu_cnt);
+      }
     }
-    imu_yaw_init = yaw;
-    imu_cnt++;
-  }
-  else
-  {
-    imu_yaw = yaw - imu_yaw_init;
-    //std::cout << "- IMU YAW: " << imu_yaw << std::endl;
-    //std::cout << "- IMU INIT: " << imu_yaw_init << std::endl;
+    else
+    {
+      imu_yaw = (double)yaw - (double)imu_yaw_init;
+      std::cout << "IMU Yaw: " << 180.0 * imu_yaw / M_PI << std::endl;
+    }
   }
 }
 
@@ -630,8 +635,8 @@ void MainNode::odom_setup()
   odom_msg.child_frame_id = base_frame;
 
   odom_msg.pose.covariance.assign(0);
-  odom_msg.pose.covariance[0] = 0.001;
-  odom_msg.pose.covariance[7] = 0.001;
+  odom_msg.pose.covariance[0] = 0.05;
+  odom_msg.pose.covariance[7] = 0.05;
   odom_msg.pose.covariance[14] = 1000000;
   odom_msg.pose.covariance[21] = 1000000;
   odom_msg.pose.covariance[28] = 1000000;
@@ -639,8 +644,8 @@ void MainNode::odom_setup()
 
   odom_msg.twist.covariance.assign(0);
 
-  odom_msg.twist.covariance[0] = 0.001;
-  odom_msg.twist.covariance[7] = 0.001;
+  odom_msg.twist.covariance[0] = 0.05;
+  odom_msg.twist.covariance[7] = 0.05;
   if (local_feedback_vel)
   {
     odom_msg.twist.covariance[7] = 1000000;
@@ -649,7 +654,7 @@ void MainNode::odom_setup()
   odom_msg.twist.covariance[14] = 1000000;
   odom_msg.twist.covariance[21] = 1000000;
   odom_msg.twist.covariance[28] = 1000000;
-  odom_msg.twist.covariance[35] = 1000;
+  odom_msg.twist.covariance[35] = 0.05;
 
 #ifdef _ODOM_SENSORS
 //  voltage_msg.header.seq = 0;
@@ -757,16 +762,15 @@ void MainNode::odom_loop()
           if (count == 0)
           {
 
-            internal_voltage = (float) std::stoi(data,nullptr,10)/10.0;
+            internal_voltage = (float)std::stoi(data, nullptr, 10) / 10.0;
           }
           else if (count == 1)
           {
-            voltage = (float) std::stoi(data,nullptr,10)/10.0;
-
+            voltage = (float)std::stoi(data, nullptr, 10) / 10.0;
           }
           else if (count == 2)
           {
-            aux_voltage = (float) std::stoi(data,nullptr,10)/1000.0;
+            aux_voltage = (float)std::stoi(data, nullptr, 10) / 1000.0;
           }
           start = (int)found + 1;
           found = odom_buf_string.find(":", found + 1);
@@ -778,38 +782,6 @@ void MainNode::odom_loop()
           data = odom_buf_string.substr(start, length);
           count++;
         }
-
-        // for (int delim = 2; delim <= odom_idx; delim++)
-        // {
-        //   if (odom_buf[delim] == ':' || odom_buf[delim] == 0)
-        //   {
-        //     odom_buf[delim] = 0;
-
-        //     switch (count)
-        //     {
-        //     case 0:
-        //       internal_voltage = (float)strtol(odom_buf + start, NULL, 10) / 10.0;
-        //       break;
-        //     case 1:
-        //       voltage = (float)strtol(odom_buf + start, NULL, 10) / 10.0;
-        //       break;
-        //     case 2:
-        //       aux_voltage = (float)strtol(odom_buf + start, NULL, 1000.0);
-        //       break;
-        //     }
-
-        //     //             if (count == 1)
-        //     //             {
-        //     //               voltage = (float)strtol(odom_buf + start, NULL, 10) / 10.0;
-        //     // #ifdef _ODOM_DEBUG
-        //     // //ROS_DEBUG_STREAM("voltage: " << voltage);
-        //     // #endif
-        //     //               break;
-        //     //             }
-        //     start = delim + 1;
-        //     count++;
-        //   }
-        // }
       }
       // BA= is motor currents
       else if (odom_buf[0] == 'B' && odom_buf[1] == 'A' && odom_buf[2] == '=')
@@ -844,16 +816,10 @@ void MainNode::odom_loop()
   }
 }
 
-//void MainNode::odom_hs_run()
-//{
-//}
-
 void MainNode::odom_ms_run()
 {
 
 #ifdef _ODOM_SENSORS
-  //  current_msg.header.seq++;
-  //  current_msg.header.stamp = ros::Time::now();
   current_msg.a = current_right;
   current_msg.b = current_left;
   current_pub.publish(current_msg);
@@ -917,11 +883,9 @@ void MainNode::odom_publish()
   //  float angular = ((float)odom_encoder_right / (float)encoder_cpr * wheel_circumference - (float)odom_encoder_left / (float)encoder_cpr * wheel_circumference) / track_width * -1.0;
 
   float angular = ((float)odom_encoder_right / (float)encoder_cpr * wheel_circumference - (float)odom_encoder_left / (float)encoder_cpr * wheel_circumference) / track_width;
-
   if (use_imu_yaw && imu_initialized)
   {
-
-    angular = imu_yaw;
+    angular = (float)imu_yaw;
   }
 
 #ifdef _ODOM_DEBUG
@@ -933,7 +897,6 @@ ROS_DEBUG(angular);
 ROS_DEBUG("");
 */
 #endif
-
   // Update odometry
   odom_x += linear * cos(odom_yaw); // m
   odom_y += linear * sin(odom_yaw); // m
