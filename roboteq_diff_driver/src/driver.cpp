@@ -313,9 +313,9 @@ void MainNode::cmdvel_callback(const geometry_msgs::Twist &twist_msg)
   // float right_speed = twist_msg.linear.x;
   // float left_speed = twist_msg.linear.x;
 
-  ROS_INFO_STREAM("================================");
-  ROS_INFO_STREAM("right linear vel:" << right_speed);
-  ROS_INFO_STREAM("right linear vel:" << left_speed);
+  // ROS_INFO_STREAM("================================");
+  // ROS_INFO_STREAM("right linear vel:" << right_speed);
+  // ROS_INFO_STREAM("right linear vel:" << left_speed);
 
   // set maximum linear speed at 0.35 m/s (4500rpm in motor)
   if (fabs(right_speed) > max_vel)
@@ -353,9 +353,9 @@ void MainNode::cmdvel_callback(const geometry_msgs::Twist &twist_msg)
     int32_t left_rpm = ((left_speed / wheel_circumference) * 60.0) * reduction_ratio;
     // int32_t right_rpm = right_speed;
     // int32_t left_rpm = left_speed;
-    ROS_INFO_STREAM("----------------------------");
-    ROS_INFO_STREAM("right motor rpm:" << right_rpm);
-    ROS_INFO_STREAM("left motor rpm:" << left_rpm);
+    // ROS_INFO_STREAM("----------------------------");
+    // ROS_INFO_STREAM("right motor rpm:" << right_rpm);
+    // ROS_INFO_STREAM("left motor rpm:" << left_rpm);
 #ifdef _CMDVEL_DEBUG
     ROS_DEBUG_STREAM("cmdvel rpm right: " << right_rpm << " left: " << left_rpm);
 #endif
@@ -366,7 +366,7 @@ void MainNode::cmdvel_callback(const geometry_msgs::Twist &twist_msg)
 #ifndef _CMDVEL_FORCE_RUN
   controller.write(right_cmd.str());
   controller.write(left_cmd.str());
-  ROS_INFO_STREAM("FLUSH");
+  // ROS_INFO_STREAM("FLUSH");
   controller.flush();
 #endif
 }
@@ -537,7 +537,6 @@ void MainNode::imu_callback(const sensor_msgs::Imu &imu)
     else
     {
       imu_yaw = (double)yaw - (double)imu_yaw_init;
-      std::cout << "IMU Yaw: " << 180.0 * imu_yaw / M_PI << std::endl;
     }
   }
 }
@@ -865,6 +864,8 @@ void MainNode::odom_publish()
   uint32_t nowtime = millis();
   float dt = (float)DELTAT(nowtime, odom_last_time) / 1000.0;
   odom_last_time = nowtime;
+  // std::cout << "dt: "<<dt << std::endl;
+  dt = 1.0/30.0;
 
 #ifdef _ODOM_DEBUG
 
@@ -922,7 +923,7 @@ ROS_DEBUG("");
   }
   else
   {
-    vx = (linear - odom_last_x) / dt;
+    vx = (linear) / dt;
     vy = 0.0;
   }
 
@@ -1021,7 +1022,7 @@ int MainNode::run()
   mstimer = starttime;
   lstimer = starttime;
 
-  //  ros::Rate loop_rate(10);
+  ros::Rate loop_rate(100);
 
   ROS_INFO("Beginning looping...");
 
@@ -1062,7 +1063,7 @@ int MainNode::run()
 
     ros::spinOnce();
 
-    //    loop_rate.sleep();
+    // loop_rate.sleep();
   }
 
   if (controller.isOpen())
