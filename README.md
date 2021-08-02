@@ -2,6 +2,8 @@
 
 ROS driver for the Roboteq SDC21xx family of motor controllers in a differential-drive configuration.
 
+FOR BRUSHLESS MOTORS WITH HALL SENSORS SEE BRUSHLESS_DEV BRANCH
+
 Subscribes to cmd_vel, publishes to odom, and broadcasts odom tf.
 
 Also publishes sensor data to some ancillary topics including roboteq/voltage, roboteq/current, roboteq/energy, and roboteq/temperature.
