@@ -5,6 +5,7 @@
 #include <string>
 #include <sstream>
 #include <math.h>
+#include <iostream>
 
 #define DELTAT(_nowtime, _thentime) ((_thentime > _nowtime) ? ((0xffffffff - _thentime) + _nowtime) : (_nowtime - _thentime))
 
@@ -309,13 +310,14 @@ void MainNode::cmdvel_callback(const geometry_msgs::Twist &twist_msg)
   // wheel speed (m/s)
   float right_speed = twist_msg.linear.x + track_width * twist_msg.angular.z / 2.0;
   float left_speed = twist_msg.linear.x - track_width * twist_msg.angular.z / 2.0;
+  // ROS_INFO_STREAM("right speed: "<<right_speed << " - left speed: "<<left_speed);
 
   // float right_speed = twist_msg.linear.x;
   // float left_speed = twist_msg.linear.x;
 
   // ROS_INFO_STREAM("================================");
-  // ROS_INFO_STREAM("right linear vel:" << right_speed);
-  // ROS_INFO_STREAM("right linear vel:" << left_speed);
+  // ROS_INFO_STREAM("right_speed:" << right_speed);
+  // ROS_INFO_STREAM("left_speed" << left_speed);
 
   // set maximum linear speed at 0.35 m/s (4500rpm in motor)
   if (fabs(right_speed) > max_vel)
@@ -326,7 +328,7 @@ void MainNode::cmdvel_callback(const geometry_msgs::Twist &twist_msg)
   {
     left_speed = sgn(left_speed) * max_vel;
   }
-
+  // ROS_INFO_STREAM("right speed: "<<right_speed << " - left speed: "<<left_speed);
 #ifdef _CMDVEL_DEBUG
   ROS_DEBUG_STREAM("cmdvel speed right: " << right_speed << " left: " << left_speed);
 #endif
@@ -351,6 +353,7 @@ void MainNode::cmdvel_callback(const geometry_msgs::Twist &twist_msg)
     // motor speed (rpm) //adding reduction ratio in equation
     int32_t right_rpm = ((right_speed / wheel_circumference) * 60.0) * reduction_ratio;
     int32_t left_rpm = ((left_speed / wheel_circumference) * 60.0) * reduction_ratio;
+
     // int32_t right_rpm = right_speed;
     // int32_t left_rpm = left_speed;
     // ROS_INFO_STREAM("----------------------------");
@@ -442,8 +445,8 @@ void MainNode::cmdvel_setup()
   // set PID parameters (gain * 10)
   controller.write("^KP 1 00\r");
   controller.write("^KP 2 00\r");
-  controller.write("^KI 1 70\r");
-  controller.write("^KI 2 70\r");
+  controller.write("^KI 1 30\r");
+  controller.write("^KI 2 30\r");
   controller.write("^KD 1 00\r");
   controller.write("^KD 2 00\r");
 
@@ -684,7 +687,9 @@ void MainNode::odom_stream()
   //  controller.write("# C_?CR_?BA_# 17\r");
   // start encoder, current and voltage output (30 hz)
   // tripling frequency since one value is output at each cycle
-  controller.write("# C_?CR_?BA_?V_# 11\r");
+  controller.write("# C_?CB_?BA_?BCR_?V_# 11\r");
+  // erase hall sensor counter
+  controller.write("!CB 1 0_!CB 2 0\r");
 #else
   //  // start encoder output (10 hz)
   //  controller.write("# C_?CR_# 100\r");
@@ -716,14 +721,19 @@ void MainNode::odom_loop()
       return;
     if (ch == '\r')
     {
-      // ROS_INFO_STREAM("line: " << odom_buf);
+
       odom_buf[odom_idx] = 0;
+      // ROS_INFO_STREAM("======================================");
+      // ROS_INFO_STREAM(odom_buf);
 #ifdef _ODOM_DEBUG
-//ROS_DEBUG_STREAM( "line: " << odom_buf );
+      ROS_DEBUG_STREAM("line: " << odom_buf);
 #endif
-      // CR= is encoder counts
-      if (odom_buf[0] == 'C' && odom_buf[1] == 'R' && odom_buf[2] == '=')
+      // if (odom_buf[0] == 'A' && odom_buf[1] == '=')
+      // if (odom_buf[0] == 'C' && odom_buf[1] == 'B' && odom_buf[2] == '=')
+      if (odom_buf[0] == 'B' && odom_buf[1] == 'C' && odom_buf[2] == 'R' && odom_buf[3] == '=')
       {
+        // ROS_INFO_STREAM("hall absolute count: " << odom_buf);
+
         int delim;
         for (delim = 3; delim < odom_idx; delim++)
         {
@@ -735,16 +745,25 @@ void MainNode::odom_loop()
           if (odom_buf[delim] == ':')
           {
             odom_buf[delim] = 0;
-            odom_encoder_right = (int32_t)strtol(odom_buf + 3, NULL, 10);
+            odom_encoder_right = (int32_t)strtol(odom_buf + 4, NULL, 10);
             odom_encoder_left = (int32_t)strtol(odom_buf + delim + 1, NULL, 10);
+
+            // ROS_INFO_STREAM("hall right: " << odom_encoder_right << "  hall left: " << odom_encoder_left);
 #ifdef _ODOM_DEBUG
-            ROS_DEBUG_STREAM("encoder right: " << odom_encoder_right << " left: " << odom_encoder_left);
+            ROS_DEBUG_STREAM("hall right: " << odom_encoder_right << "  hall left: " << odom_encoder_left);
 #endif
             odom_publish();
             break;
           }
+
         }
       }
+
+      // if (odom_buf[0] == 'C' && odom_buf[1] == 'B' && odom_buf[2] == '=')
+      // {
+      //   ROS_INFO_STREAM("hall absolute count: " << odom_buf);
+      // }
+
 #ifdef _ODOM_SENSORS
       // V= is voltages
       else if (odom_buf[0] == 'V' && odom_buf[1] == '=')
@@ -865,7 +884,7 @@ void MainNode::odom_publish()
   float dt = (float)DELTAT(nowtime, odom_last_time) / 1000.0;
   odom_last_time = nowtime;
   // std::cout << "dt: "<<dt << std::endl;
-  dt = 1.0/30.0;
+  dt = 1.0 / 30.0;
 
 #ifdef _ODOM_DEBUG
 
@@ -882,7 +901,7 @@ void MainNode::odom_publish()
   // determine deltas of distance and angle, odom_encoder_right is the relative count of encoder from serial
   float linear = (((float)odom_encoder_right / (float)encoder_cpr) * wheel_circumference + ((float)odom_encoder_left / (float)encoder_cpr) * wheel_circumference) / 2.0;
   //  float angular = ((float)odom_encoder_right / (float)encoder_cpr * wheel_circumference - (float)odom_encoder_left / (float)encoder_cpr * wheel_circumference) / track_width * -1.0;
-
+  // ROS_INFO_STREAM(odom_encoder_right << encoder_cpr);
   float angular = ((float)odom_encoder_right / (float)encoder_cpr * wheel_circumference - (float)odom_encoder_left / (float)encoder_cpr * wheel_circumference) / track_width;
   if (use_imu_yaw && imu_initialized)
   {

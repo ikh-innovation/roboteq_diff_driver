@@ -3,13 +3,20 @@
   <!-- publishes odom topic with base_link frame -->
   <!-- broadcasts odom->base_link transform -->
   <arg name="param" default="value" />
-  
+
   <arg name="prefix" default="roboteq_" />
   <arg name="pub_odom_tf" default="true" />
-  <arg name="config_dir" default="$(find roboteq_diff_driver)/config/params.yaml"/>
+  <arg name="config_dir" default="$(find roboteq_diff_driver)/config/params.yaml" />
 
+  <arg name="joy_dev" default="/dev/input/js0" />
+  <arg name="autorepeat_rate" default="10" />
+  <arg name="joy_deadzone" default="0.10" />
+  <arg name="pad_model" default="ps4" />
+  <!-- topics to publish velocity, io, mode and ptz commands-->
+  <arg name="cmd_topic_vel" default="/cmd_vel" />
+  <arg name="pad_config" default="$(find aristos_teleop)/config/$(arg pad_model).yaml" />
 
-  <node pkg="roboteq_diff_driver" type="driver" name="roboteq_diff_driver" output="screen">
+  <node pkg="roboteq_diff_driver" type="driver" name="roboteq_diff_driver" output="screen" respawn="true">
     <rosparam command="load" file="$(arg config_dir)" />
     <!-- enable broadcast of odom tf -->
     <param name="pub_odom_tf" value="$(arg pub_odom_tf)" />
