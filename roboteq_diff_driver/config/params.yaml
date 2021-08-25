@@ -17,8 +17,8 @@ wheel_circumference: 0.3829
 # specify robot track width in meters
 track_width: 0.91
 # specify pulse-per-revolution for motor encoders for wheel rotation
-encoder_ppr: 6
-# specify counts-per-revolution for motor encoders for wheel rotation (hall_states*reduction_ratio*pole_pairs for hall sensors)
+# encoder_ppr: 6
+# specify counts-per-revolution for motor encoders for wheel rotation (hall_states*reduction_ratio*pole_pairs for hall sensors = 6*91*8)
 encoder_cpr: 4368
 # specify maximum motor current (amps)
 max_amps: 4.5

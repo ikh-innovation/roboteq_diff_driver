@@ -193,7 +193,7 @@ protected:
   bool open_loop;
   double wheel_circumference;
   double track_width;
-  int encoder_ppr;
+  // int encoder_ ppr;
   int encoder_cpr;
   double max_amps;
   int max_rpm;
@@ -238,7 +238,7 @@ MainNode::MainNode() : starttime(0),
                        baud(115200),
                        wheel_circumference(0),
                        track_width(0),
-                       encoder_ppr(0),
+                      //  encoder_ppr(0),
                        encoder_cpr(0),
                        max_amps(0.0),
                        max_rpm(0),
@@ -275,8 +275,8 @@ MainNode::MainNode() : starttime(0),
   ROS_INFO_STREAM("wheel_circumference: " << wheel_circumference);
   nhLocal.param("track_width", track_width, 0.4318);
   ROS_INFO_STREAM("track_width: " << track_width);
-  nhLocal.param("encoder_ppr", encoder_ppr, 900);
-  ROS_INFO_STREAM("encoder_ppr: " << encoder_ppr);
+  // nhLocal.param("encoder_ppr", encoder_ppr, 900);
+  // ROS_INFO_STREAM("encoder_ppr: " << encoder_ppr);
   nhLocal.param("encoder_cpr", encoder_cpr, 3600);
   ROS_INFO_STREAM("encoder_cpr: " << encoder_cpr);
   nhLocal.param("max_amps", max_amps, 5.0);
@@ -459,12 +459,12 @@ void MainNode::cmdvel_setup()
   controller.write("^CLERD 2 3\r");
 
   // set encoder counts (ppr)
-  std::stringstream right_enccmd;
-  std::stringstream left_enccmd;
-  right_enccmd << "^EPPR 1 " << encoder_ppr << "\r";
-  left_enccmd << "^EPPR 2 " << encoder_ppr << "\r";
-  controller.write(right_enccmd.str());
-  controller.write(left_enccmd.str());
+  // std::stringstream right_enccmd;
+  // std::stringstream left_enccmd;
+  // right_enccmd << "^EPPR 1 " << encoder_ppr << "\r";
+  // left_enccmd << "^EPPR 2 " << encoder_ppr << "\r";
+  // controller.write(right_enccmd.str());
+  // controller.write(left_enccmd.str());
 
   controller.flush();
 
