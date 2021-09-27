@@ -9,6 +9,7 @@
 #include <ros/ros.h>
 #include <std_msgs/String.h>
 #include <std_msgs/Empty.h>
+#include <std_msgs/Int16.h>
 #include <iostream>
 #include <sstream>
 #include <typeinfo>
@@ -66,7 +67,7 @@ private:
 		nh.getParam("reduction_ratio", reduction_ratio);
 		nh.getParam("max_vel", max_vel);
 		nh.getParam("wheel_circumference", wheel_circumference);
-		cmd_vel_sub = nh.subscribe("/cmd_vel", 10, &RoboteqDriver::cmd_vel_callback, this);
+		cmd_vel_sub = nh.subscribe("/brush_rpm", 10, &RoboteqDriver::cmd_vel_callback, this);
 
 		connect();
 	}
@@ -103,44 +104,36 @@ private:
 		run();
 	}
 
-	void cmd_vel_callback(const geometry_msgs::Twist &msg)
+	void cmd_vel_callback(const std_msgs::Int16 &msg)
 	{	 
 		// wheel speed (m/s)
-		float right_speed = msg.linear.x + track_width * msg.angular.z / 2.0;
-		float left_speed = msg.linear.x - track_width * msg.angular.z / 2.0;
+		float rpm = msg.data;
 
 		// ROS_INFO_STREAM("================================");
-		// ROS_INFO_STREAM("right_speed:" << right_speed);
+		// ROS_INFO_STREAM("right_speed:" << rpm);
 		// ROS_INFO_STREAM("left_speed" << left_speed);
 
 		// set maximum linear speed at 0.35 m/s (4500rpm in motor)
-		if (fabs(right_speed) > max_vel)
-		{
-			if (right_speed > 0) {right_speed = max_vel;}
-			else {right_speed = -max_vel;}
-		}
-		if (fabs(left_speed) > max_vel)
-		{
-			if (left_speed > 0) {left_speed = max_vel;}
-			else {left_speed = -max_vel;}
-		}
-		// std::stringstream cmd_sub;
+		// if (fabs(right_speed) > max_vel)
+		// {
+		// 	if (right_speed > 0) {right_speed = max_vel;}
+		// 	else {right_speed = -max_vel;}
+		// }
+		// if (fabs(left_speed) > max_vel)
+		// {
+		// 	if (left_speed > 0) {left_speed = max_vel;}
+		// 	else {left_speed = -max_vel;}
+		// }
 		
-		// int32_t right_rpm = ((right_speed / wheel_circumference) * 60.0) * reduction_ratio;
-    	// int32_t left_rpm = ((left_speed / wheel_circumference) * 60.0) * reduction_ratio;
-		int32_t right_rpm = (-right_speed * reduction_ratio * 63 * 60) / (wheel_circumference * 18);
-    	int32_t left_rpm = (-left_speed * reduction_ratio * 63 * 60) / (wheel_circumference * 18);
-
-		ROS_INFO_STREAM("right_rpm: "<<abs(right_rpm) << " - left_rpm: "<<abs(left_rpm));
 
 		std::stringstream right_cmd;
 		std::stringstream left_cmd;
-		right_cmd << "!S 1 " << (int)(right_rpm) << "\r";
-		left_cmd << "!S 2 " << (int)(left_rpm) << "\r";
+		right_cmd << "!S 1 " << (int)(rpm) << "\r";
+		left_cmd << "!S 2 " << (int)(rpm) << "\r";
 
-		// ROS_INFO_STREAM("----------------------------");
-		// ROS_INFO_STREAM("right motor rpm:" << right_rpm*0.1);
-		// ROS_INFO_STREAM("left motor rpm:" << left_rpm*0.1);
+		ROS_INFO_STREAM("----------------------------");
+		ROS_INFO_STREAM("right motor rpm:" << rpm);
+		ROS_INFO_STREAM("left motor rpm:" << rpm);
 
 		ser.write(right_cmd.str());
 		ser.write(left_cmd.str());
